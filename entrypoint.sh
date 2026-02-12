@@ -1,6 +1,9 @@
 #!/bin/bash
 set -e
 
+# Disable core dumps
+ulimit -c 0
+
 # Start Docker daemon
 /usr/local/bin/start-dockerd.sh
 
