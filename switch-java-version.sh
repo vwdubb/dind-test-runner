@@ -28,7 +28,7 @@ case "$REQUESTED_VERSION" in
     12|13|14|15|16|17)
         JAVA_VERSION=17
         ;;
-    18|19|20|21|22|23|24|25)
+    18|19|20|21)
         JAVA_VERSION=21
         ;;
     *)

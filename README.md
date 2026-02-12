@@ -5,7 +5,7 @@ A Docker-in-Docker (DinD) test environment for running integration tests that re
 ## Features
 
 - **Docker-in-Docker**: Run Docker containers within your tests without polluting your host Docker environment
-- **Multi-Java Support**: Automatically detects and switches between Java 8, 11, 17, 21, and 25
+- **Multi-Java Support**: Automatically detects and switches between Java 8, 11, 17, and 21
 - **Multi-Module Projects**: Intelligently handles Maven multi-module projects with different Java versions
 - **Persistent Caches**: Speeds up builds with persistent Maven, npm, pip, and Gradle caches
 - **Cross-Platform**: Works on both ARM (Apple Silicon) and x86_64 architectures
@@ -139,7 +139,7 @@ my-project/
 - **Java 17**
 - **Java 21** (default)
 
-**Note:** Java 22-25 projects will automatically use Java 21 until newer versions become available in Alpine Linux repositories.
+**Note:** Java 22+ projects will automatically use Java 21 until newer versions become available in Alpine Linux repositories.
 
 ### Manual Override
 
@@ -378,7 +378,7 @@ echo "17" > .java-version
 ```
 
 Supported formats:
-- `8`, `11`, `17`, `21`, `25`
+- `8`, `11`, `17`, `21`
 - `1.8` (automatically normalized to `8`)
 
 #### Maven `pom.xml`
@@ -948,7 +948,7 @@ This tool is provided as-is for use in development and CI/CD environments.
 
 ### Version 1.0
 - Initial release
-- Support for Java 8, 11, 17, 21, 25
+- Support for Java 8, 11, 17, 21
 - Multi-module Maven project support
 - Automatic Java version detection
 - Persistent build caches
