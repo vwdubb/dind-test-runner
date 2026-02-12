@@ -1,0 +1,307 @@
+#!/bin/bash
+# dind-test - Convenience CLI for running tests in Docker-in-Docker environment
+
+set -e
+
+# Resolve symlinks to get the real script directory
+SOURCE="${BASH_SOURCE[0]}"
+while [ -h "$SOURCE" ]; do
+  SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ $SOURCE != /* ]] && SOURCE="$SCRIPT_DIR/$SOURCE"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+COMPOSE_FILE="$SCRIPT_DIR/docker-compose.yml"
+
+# Detect docker-compose command
+if command -v docker-compose &> /dev/null; then
+    COMPOSE_CMD="docker-compose"
+elif docker compose version &> /dev/null 2>&1; then
+    COMPOSE_CMD="docker compose"
+else
+    echo "Error: Neither 'docker-compose' nor 'docker compose' is available"
+    exit 1
+fi
+
+# Function to display usage
+usage() {
+    cat <<EOF
+Usage: dind-test <command> [options]
+
+Commands:
+  init                    Initialize the DinD test runner (build image)
+  run <test_command>      Run tests in DinD environment
+  shell                   Open an interactive shell in DinD environment
+  status                  Show status (image, volumes, disk usage)
+  clean                   Clean up Docker images inside DinD
+  clean-all               Remove all volumes (nuclear option)
+  help                    Show this help message
+
+Options for 'run' command:
+  --prepull <images>      Pre-pull comma-separated list of images
+  --workdir <path>        Set working directory (default: /workspace)
+  --debug                 Enable debug output
+  --cleanup               Clean up containers after run
+
+Environment Variables:
+  MAVEN_SETTINGS_FILE     Path to Maven settings.xml (default: ~/.m2/settings.xml)
+                          Set to 'none' to disable mounting settings.xml
+
+Examples:
+  # Initialize (first time)
+  dind-test init
+
+  # Run Maven tests
+  dind-test run mvn test
+
+  # Run Maven tests with specific test class
+  dind-test run mvn test -Dtest=MyTest
+
+  # Run npm tests with pre-pulled images
+  dind-test run --prepull mysql:5.7.35,redis:latest -- npm test
+
+  # Run pytest
+  dind-test run pytest tests/
+
+  # Disable Maven settings.xml mounting
+  MAVEN_SETTINGS_FILE=none dind-test run mvn test
+
+  # Use custom Maven settings.xml
+  MAVEN_SETTINGS_FILE=/path/to/custom/settings.xml dind-test run mvn test
+
+  # Open interactive shell for debugging
+  dind-test shell
+
+  # Check status
+  dind-test status
+
+EOF
+}
+
+# Function to initialize (build image)
+cmd_init() {
+    echo "Building DinD test runner image..."
+    cd "$SCRIPT_DIR"
+    $COMPOSE_CMD build
+    echo ""
+    echo "✓ DinD test runner initialized successfully"
+    echo ""
+    echo "Next steps:"
+    echo "  - Run 'dind-test run <command>' to execute tests"
+    echo "  - Run 'dind-test shell' for interactive debugging"
+}
+
+# Function to run tests
+cmd_run() {
+    local prepull_images=""
+    local workdir=""
+    local debug="false"
+    local cleanup="false"
+    local test_command=()
+
+    # Parse options
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --prepull)
+                prepull_images="$2"
+                shift 2
+                ;;
+            --workdir)
+                workdir="$2"
+                shift 2
+                ;;
+            --debug)
+                debug="true"
+                shift
+                ;;
+            --cleanup)
+                cleanup="true"
+                shift
+                ;;
+            --)
+                shift
+                test_command=("$@")
+                break
+                ;;
+            *)
+                test_command+=("$1")
+                shift
+                ;;
+        esac
+    done
+
+    if [ ${#test_command[@]} -eq 0 ]; then
+        echo "Error: No test command specified"
+        echo "Usage: dind-test run [options] <test_command>"
+        exit 1
+    fi
+
+    # Build environment variables
+    local env_args=""
+    [ -n "$prepull_images" ] && env_args="$env_args -e PREPULL_IMAGES=$prepull_images"
+    [ -n "$workdir" ] && env_args="$env_args -e WORKDIR=$workdir"
+    [ "$debug" = "true" ] && env_args="$env_args -e DEBUG=true"
+    [ "$cleanup" = "true" ] && env_args="$env_args -e CLEANUP_CONTAINERS=true"
+
+    # Check for Maven settings.xml and mount if exists (unless disabled)
+    local maven_settings_volume=""
+    if [ "${MAVEN_SETTINGS_FILE:-auto}" != "none" ]; then
+        local settings_file="${MAVEN_SETTINGS_FILE:-$HOME/.m2/settings.xml}"
+        if [ -f "$settings_file" ]; then
+            maven_settings_volume="-v $settings_file:/root/.m2/settings.xml:ro"
+            [ "$debug" = "true" ] && echo "Mounting Maven settings.xml from: $settings_file"
+        fi
+    fi
+
+    # Get current directory as project directory
+    export PROJECT_DIR="$(pwd)"
+    export PROJECT_NAME="$(basename "$PROJECT_DIR")"
+
+    echo "Running tests in DinD environment..."
+    echo "Project directory: $PROJECT_DIR"
+    echo "Container name: dind-test-runner-$PROJECT_NAME"
+    echo "Command: ${test_command[*]}"
+    echo ""
+
+    cd "$SCRIPT_DIR"
+    $COMPOSE_CMD run --rm \
+        --name "dind-test-runner-$PROJECT_NAME" \
+        -v "$PROJECT_DIR:/workspace:cached" \
+        $maven_settings_volume \
+        $env_args \
+        dind-test-runner \
+        "${test_command[@]}"
+}
+
+# Function to open interactive shell
+cmd_shell() {
+    # Check for Maven settings.xml and mount if exists (unless disabled)
+    local maven_settings_volume=""
+    if [ "${MAVEN_SETTINGS_FILE:-auto}" != "none" ]; then
+        local settings_file="${MAVEN_SETTINGS_FILE:-$HOME/.m2/settings.xml}"
+        if [ -f "$settings_file" ]; then
+            maven_settings_volume="-v $settings_file:/root/.m2/settings.xml:ro"
+        fi
+    fi
+
+    export PROJECT_DIR="$(pwd)"
+    export PROJECT_NAME="$(basename "$PROJECT_DIR")"
+
+    echo "Opening interactive shell in DinD environment..."
+    echo "Project directory: $PROJECT_DIR"
+    echo "Container name: dind-test-runner-$PROJECT_NAME"
+    echo ""
+    echo "Inside the shell:"
+    echo "  - Docker daemon will start automatically"
+    echo "  - Your project is mounted at /workspace"
+    echo "  - Run your tests manually (e.g., 'mvn test', 'npm test')"
+    echo ""
+
+    cd "$SCRIPT_DIR"
+    $COMPOSE_CMD run --rm \
+        --name "dind-test-runner-$PROJECT_NAME" \
+        -v "$PROJECT_DIR:/workspace:cached" \
+        $maven_settings_volume \
+        dind-test-runner \
+        bash
+}
+
+# Function to show status
+cmd_status() {
+    echo "=== DinD Test Runner Status ==="
+    echo ""
+
+    # Check if image exists
+    if docker images | grep -q dind-test-runner; then
+        echo "✓ Image: dind-test-runner:latest"
+        docker images dind-test-runner:latest --format "  Size: {{.Size}}, Created: {{.CreatedSince}}"
+    else
+        echo "✗ Image: dind-test-runner:latest not found"
+        echo "  Run 'dind-test init' to build the image"
+    fi
+
+    echo ""
+    echo "=== Persistent Volumes ==="
+    docker volume ls | grep -E "dind-test-runner|maven-cache|npm-cache|docker-images" || echo "No volumes found"
+
+    echo ""
+    echo "=== Volume Sizes ==="
+    docker system df -v | grep -E "maven-cache|npm-cache|pip-cache|gradle-cache|docker-images" || echo "No volume data available"
+
+    echo ""
+    echo "=== Disk Usage Summary ==="
+    docker system df
+}
+
+# Function to clean up images inside DinD
+cmd_clean() {
+    echo "Cleaning up Docker images inside DinD..."
+    echo "This will remove unused images but preserve the volume"
+    echo ""
+
+    export PROJECT_DIR="$(pwd)"
+    export PROJECT_NAME="$(basename "$PROJECT_DIR")"
+
+    cd "$SCRIPT_DIR"
+    $COMPOSE_CMD run --rm \
+        --name "dind-test-runner-$PROJECT_NAME" \
+        dind-test-runner \
+        bash -c "/usr/local/bin/start-dockerd.sh && docker system prune -af"
+
+    echo ""
+    echo "✓ Cleanup complete"
+}
+
+# Function to remove all volumes (nuclear option)
+cmd_clean_all() {
+    echo "WARNING: This will remove all persistent volumes including:"
+    echo "  - Maven cache"
+    echo "  - npm cache"
+    echo "  - pip cache"
+    echo "  - Gradle cache"
+    echo "  - Docker images"
+    echo ""
+    read -p "Are you sure? (yes/no): " confirm
+
+    if [ "$confirm" = "yes" ]; then
+        cd "$SCRIPT_DIR"
+        $COMPOSE_CMD down -v
+        echo ""
+        echo "✓ All volumes removed"
+        echo "  Run 'dind-test init' to rebuild the image"
+    else
+        echo "Cancelled"
+    fi
+}
+
+# Main command dispatcher
+case "${1:-help}" in
+    init)
+        cmd_init
+        ;;
+    run)
+        shift
+        cmd_run "$@"
+        ;;
+    shell)
+        cmd_shell
+        ;;
+    status)
+        cmd_status
+        ;;
+    clean)
+        cmd_clean
+        ;;
+    clean-all)
+        cmd_clean_all
+        ;;
+    help|--help|-h)
+        usage
+        ;;
+    *)
+        echo "Error: Unknown command '$1'"
+        echo ""
+        usage
+        exit 1
+        ;;
+esac

@@ -1,0 +1,84 @@
+services:
+  dind-test-runner:
+    container_name: dind-test-runner-${PROJECT_NAME:-default}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        JAVA_VERSION: ${JAVA_VERSION:-21}
+        MAVEN_VERSION: ${MAVEN_VERSION:-3.9.6}
+        NODE_VERSION: ${NODE_VERSION:-20}
+        PYTHON_VERSION: ${PYTHON_VERSION:-3.11}
+    image: dind-test-runner:latest
+    privileged: true  # Required for Docker-in-Docker
+
+    volumes:
+      # Project directory (override this per project)
+      - ${PROJECT_DIR:-.}:/workspace:cached
+
+      # Persistent caches (shared across all projects)
+      - maven-cache:/root/.m2/repository
+      - npm-cache:/root/.npm
+      - pip-cache:/root/.cache/pip
+      - gradle-cache:/root/.gradle
+
+      # This prevents re-downloading images on every run
+      - docker-images:/var/lib/docker
+
+      # Optional: Uncomment to mount your Maven settings.xml
+      # - ~/.m2/settings.xml:/root/.m2/settings.xml:ro
+
+    environment:
+      # Testcontainers configuration
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      - TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock
+      - DOCKER_DEFAULT_PLATFORM=linux/amd64
+      - TESTCONTAINERS_RYUK_DISABLED=false
+      - TESTCONTAINERS_CHECKS_DISABLE=false
+
+      # Optional: Pre-pull images (comma-separated list)
+      - PREPULL_IMAGES=${PREPULL_IMAGES:-}
+
+      # Optional: Working directory inside container
+      - WORKDIR=${WORKDIR:-/workspace}
+
+      # Optional: Debug mode
+      - DEBUG=${DEBUG:-false}
+
+      # Optional: Cleanup containers after run
+      - CLEANUP_CONTAINERS=${CLEANUP_CONTAINERS:-false}
+
+      # Tool-specific settings (overridable)
+      - MAVEN_OPTS=${MAVEN_OPTS:--XX:+TieredCompilation -XX:TieredStopAtLevel=1 -Xmx2048m}
+      - NODE_OPTIONS=${NODE_OPTIONS:--max-old-space-size=4096}
+
+    # Resource limits (adjust based on your machine)
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: '4'
+    #       memory: 8G
+    #     reservations:
+    #       cpus: '2'
+    #       memory: 4G
+
+    # Default command (override when running)
+    command: ["bash", "-c", "echo 'DinD test runner ready. Specify a command to run.'"]
+
+volumes:
+  # Persistent volumes shared across all projects
+  maven-cache:
+    name: dind-maven-cache
+    driver: local
+  npm-cache:
+    name: dind-npm-cache
+    driver: local
+  pip-cache:
+    name: dind-pip-cache
+    driver: local
+  gradle-cache:
+    name: dind-gradle-cache
+    driver: local
+  docker-images:
+    name: dind-docker-images
+    driver: local
