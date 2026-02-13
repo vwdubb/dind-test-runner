@@ -13,16 +13,9 @@ if [ -z "$REQUESTED_VERSION" ]; then
     exit 1
 fi
 
-# Normalize version: extract major version number
-# Handles formats like "17", "17.0.1", "1.8", "1.8.0_292"
+# Normalize version (remove any non-numeric characters)
 # Using sed for BusyBox compatibility
-if echo "$REQUESTED_VERSION" | grep -q '^1\.[0-9]'; then
-    # Legacy format (1.8, 1.8.0_292) -> extract minor as major
-    REQUESTED_VERSION=$(echo "$REQUESTED_VERSION" | sed 's/^1\.\([0-9]*\).*/\1/')
-else
-    # Modern format (11, 17.0.1, 21) -> extract first number
-    REQUESTED_VERSION=$(echo "$REQUESTED_VERSION" | sed 's/^\([0-9]*\).*/\1/')
-fi
+REQUESTED_VERSION=$(echo "$REQUESTED_VERSION" | sed 's/[^0-9]//g' | head -c 2)
 
 # Map to available versions (8, 11, 17, 21 are installed)
 case "$REQUESTED_VERSION" in
