@@ -13,9 +13,12 @@ if [ -z "$REQUESTED_VERSION" ]; then
     exit 1
 fi
 
-# Normalize version (remove any non-numeric characters)
-# Using sed for BusyBox compatibility
-REQUESTED_VERSION=$(echo "$REQUESTED_VERSION" | sed 's/[^0-9]//g' | head -c 2)
+# Normalize version: handle "1.x" legacy format (e.g., "1.8" -> "8"), then strip non-numeric
+if echo "$REQUESTED_VERSION" | grep -q '^1\.'; then
+    REQUESTED_VERSION=$(echo "$REQUESTED_VERSION" | sed 's/^1\.//' | sed 's/[^0-9]//g' | cut -c1-2)
+else
+    REQUESTED_VERSION=$(echo "$REQUESTED_VERSION" | sed 's/[^0-9]//g' | cut -c1-2)
+fi
 
 # Map to available versions (8, 11, 17, 21 are installed)
 case "$REQUESTED_VERSION" in

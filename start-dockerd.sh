@@ -19,7 +19,7 @@ echo "Note: Using Docker Desktop's built-in QEMU support for x86_64 containers"
 echo "Starting Docker daemon..."
 dockerd \
   --host=unix:///var/run/docker.sock \
-  --host=tcp://0.0.0.0:2375 \
+  --host=tcp://127.0.0.1:2375 \
   > /var/log/dockerd.log 2>&1 &
 
 DOCKERD_PID=$!
