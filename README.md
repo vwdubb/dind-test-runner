@@ -2,6 +2,29 @@
 
 A Docker-in-Docker (DinD) test environment for running integration tests that require Docker containers. Provides isolated, reproducible test environments with automatic Java version detection and persistent build caches.
 
+## TLDR
+
+Run integration tests with Docker containers in an isolated environment without polluting your host Docker setup.
+
+**Quick Start:**
+```bash
+# Pull the pre-built image
+docker pull vwdubb/dind-test-runner:latest
+
+# Run your tests (from your project directory)
+docker run --rm --privileged -t \
+  -v "$(pwd):/workspace:cached" \
+  -v dind-maven-cache:/root/.m2/repository \
+  -v dind-docker-images:/var/lib/docker \
+  vwdubb/dind-test-runner:latest \
+  mvn test
+
+# Or use the dind-test wrapper script (after installing)
+dind-test run mvn test
+```
+
+**Key Features:** Auto-detects Java versions (8/11/17/21), supports multi-module Maven projects, works with Testcontainers, persistent caches for faster builds, cross-platform (ARM/x86_64).
+
 ## Features
 
 - **Docker-in-Docker**: Run Docker containers within your tests without polluting your host Docker environment
