@@ -26,11 +26,6 @@ detect_from_maven() {
         java_version=$(sed -n 's/.*<maven\.compiler\.target>\([^<]*\)<\/maven\.compiler\.target>.*/\1/p' "$pom_file" 2>/dev/null | head -1)
     fi
 
-    # Check <maven.compiler.release> (Java 9+ replacement for source/target)
-    if [ -z "$java_version" ]; then
-        java_version=$(sed -n 's/.*<maven\.compiler\.release>\([^<]*\)<\/maven\.compiler\.release>.*/\1/p' "$pom_file" 2>/dev/null | head -1)
-    fi
-
     # If root pom doesn't have version and it's a multi-module project, check all modules
     # For multi-module projects with different versions, use the HIGHEST version
     if [ -z "$java_version" ]; then
@@ -50,10 +45,6 @@ detect_from_maven() {
 
                 if [ -z "$module_version" ]; then
                     module_version=$(sed -n 's/.*<maven\.compiler\.target>\([^<]*\)<\/maven\.compiler\.target>.*/\1/p' "$WORKDIR/$module/pom.xml" 2>/dev/null | head -1)
-                fi
-
-                if [ -z "$module_version" ]; then
-                    module_version=$(sed -n 's/.*<maven\.compiler\.release>\([^<]*\)<\/maven\.compiler\.release>.*/\1/p' "$WORKDIR/$module/pom.xml" 2>/dev/null | head -1)
                 fi
 
                 # Normalize version (e.g., "1.8" -> "8")
@@ -119,16 +110,6 @@ detect_from_gradle() {
 
     if [ -z "$java_version" ]; then
         java_version=$(sed -n 's/.*targetCompatibility.*["\x27]\([0-9][0-9]*\)["\x27].*/\1/p' "$gradle_file" 2>/dev/null | head -1)
-    fi
-
-    # Try toolchain API: java.toolchain.languageVersion.set(JavaLanguageVersion.of(17))
-    if [ -z "$java_version" ]; then
-        java_version=$(sed -n 's/.*JavaLanguageVersion\.of(\([0-9][0-9]*\)).*/\1/p' "$gradle_file" 2>/dev/null | head -1)
-    fi
-
-    # Try Kotlin DSL shorthand: jvmToolchain(17)
-    if [ -z "$java_version" ]; then
-        java_version=$(sed -n 's/.*jvmToolchain(\([0-9][0-9]*\)).*/\1/p' "$gradle_file" 2>/dev/null | head -1)
     fi
 
     if [ -n "$java_version" ]; then
