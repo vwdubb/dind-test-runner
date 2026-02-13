@@ -78,6 +78,20 @@ Examples:
 EOF
 }
 
+# Helper function to resolve Maven settings.xml volume mount args
+# Sets the MAVEN_SETTINGS_ARGS array variable
+resolve_maven_settings() {
+    local debug="${1:-false}"
+    MAVEN_SETTINGS_ARGS=()
+    if [ "${MAVEN_SETTINGS_FILE:-auto}" != "none" ]; then
+        local settings_file="${MAVEN_SETTINGS_FILE:-$HOME/.m2/settings.xml}"
+        if [ -f "$settings_file" ]; then
+            MAVEN_SETTINGS_ARGS=(-v "$settings_file:/root/.m2/settings.xml:ro")
+            [ "$debug" = "true" ] && echo "Mounting Maven settings.xml from: $settings_file"
+        fi
+    fi
+}
+
 # Function to initialize (build image)
 cmd_init() {
     echo "Building DinD test runner image..."
@@ -136,22 +150,15 @@ cmd_run() {
         exit 1
     fi
 
-    # Build environment variables
-    local env_args=""
-    [ -n "$prepull_images" ] && env_args="$env_args -e PREPULL_IMAGES=$prepull_images"
-    [ -n "$workdir" ] && env_args="$env_args -e WORKDIR=$workdir"
-    [ "$debug" = "true" ] && env_args="$env_args -e DEBUG=true"
-    [ "$cleanup" = "true" ] && env_args="$env_args -e CLEANUP_CONTAINERS=true"
+    # Build environment variables as an array for safe quoting
+    local env_args=()
+    [ -n "$prepull_images" ] && env_args+=(-e "PREPULL_IMAGES=$prepull_images")
+    [ -n "$workdir" ] && env_args+=(-e "WORKDIR=$workdir")
+    [ "$debug" = "true" ] && env_args+=(-e "DEBUG=true")
+    [ "$cleanup" = "true" ] && env_args+=(-e "CLEANUP_CONTAINERS=true")
 
-    # Check for Maven settings.xml and mount if exists (unless disabled)
-    local maven_settings_volume=""
-    if [ "${MAVEN_SETTINGS_FILE:-auto}" != "none" ]; then
-        local settings_file="${MAVEN_SETTINGS_FILE:-$HOME/.m2/settings.xml}"
-        if [ -f "$settings_file" ]; then
-            maven_settings_volume="-v $settings_file:/root/.m2/settings.xml:ro"
-            [ "$debug" = "true" ] && echo "Mounting Maven settings.xml from: $settings_file"
-        fi
-    fi
+    # Resolve Maven settings.xml mount
+    resolve_maven_settings "$debug"
 
     # Get current directory as project directory
     export PROJECT_DIR="$(pwd)"
@@ -167,22 +174,16 @@ cmd_run() {
     $COMPOSE_CMD run --rm \
         --name "dind-test-runner-$PROJECT_NAME" \
         -v "$PROJECT_DIR:/workspace:cached" \
-        $maven_settings_volume \
-        $env_args \
+        "${MAVEN_SETTINGS_ARGS[@]}" \
+        "${env_args[@]}" \
         dind-test-runner \
         "${test_command[@]}"
 }
 
 # Function to open interactive shell
 cmd_shell() {
-    # Check for Maven settings.xml and mount if exists (unless disabled)
-    local maven_settings_volume=""
-    if [ "${MAVEN_SETTINGS_FILE:-auto}" != "none" ]; then
-        local settings_file="${MAVEN_SETTINGS_FILE:-$HOME/.m2/settings.xml}"
-        if [ -f "$settings_file" ]; then
-            maven_settings_volume="-v $settings_file:/root/.m2/settings.xml:ro"
-        fi
-    fi
+    # Resolve Maven settings.xml mount
+    resolve_maven_settings
 
     export PROJECT_DIR="$(pwd)"
     export PROJECT_NAME="$(basename "$PROJECT_DIR")"
@@ -201,7 +202,7 @@ cmd_shell() {
     $COMPOSE_CMD run --rm \
         --name "dind-test-runner-$PROJECT_NAME" \
         -v "$PROJECT_DIR:/workspace:cached" \
-        $maven_settings_volume \
+        "${MAVEN_SETTINGS_ARGS[@]}" \
         dind-test-runner \
         bash
 }
