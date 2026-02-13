@@ -13,13 +13,13 @@ done
 SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
 COMPOSE_FILE="$SCRIPT_DIR/docker-compose.yml"
 
-# Detect docker-compose command
-if command -v docker-compose &> /dev/null; then
-    COMPOSE_CMD="docker-compose"
-elif docker compose version &> /dev/null 2>&1; then
+# Detect docker-compose command (prefer v2 plugin over deprecated v1 standalone)
+if docker compose version &> /dev/null 2>&1; then
     COMPOSE_CMD="docker compose"
+elif command -v docker-compose &> /dev/null; then
+    COMPOSE_CMD="docker-compose"
 else
-    echo "Error: Neither 'docker-compose' nor 'docker compose' is available"
+    echo "Error: Neither 'docker compose' nor 'docker-compose' is available"
     exit 1
 fi
 
@@ -78,11 +78,28 @@ Examples:
 EOF
 }
 
+# Helper: build Maven settings.xml volume args if applicable
+get_maven_settings_args() {
+    # Populates the MAVEN_SETTINGS_ARGS array in the caller's scope
+    MAVEN_SETTINGS_ARGS=()
+    if [ "${MAVEN_SETTINGS_FILE:-auto}" != "none" ]; then
+        local settings_file="${MAVEN_SETTINGS_FILE:-$HOME/.m2/settings.xml}"
+        if [ -f "$settings_file" ]; then
+            MAVEN_SETTINGS_ARGS=(-v "$settings_file:/root/.m2/settings.xml:ro")
+        fi
+    fi
+}
+
+# Helper: set PROJECT_DIR and PROJECT_NAME from the current working directory
+set_project_vars() {
+    export PROJECT_DIR="$(pwd)"
+    export PROJECT_NAME="$(basename "$PROJECT_DIR")"
+}
+
 # Function to initialize (build image)
 cmd_init() {
     echo "Building DinD test runner image..."
-    cd "$SCRIPT_DIR"
-    $COMPOSE_CMD build
+    $COMPOSE_CMD -f "$COMPOSE_FILE" build
     echo ""
     echo "✓ DinD test runner initialized successfully"
     echo ""
@@ -136,26 +153,21 @@ cmd_run() {
         exit 1
     fi
 
-    # Build environment variables
-    local env_args=""
-    [ -n "$prepull_images" ] && env_args="$env_args -e PREPULL_IMAGES=$prepull_images"
-    [ -n "$workdir" ] && env_args="$env_args -e WORKDIR=$workdir"
-    [ "$debug" = "true" ] && env_args="$env_args -e DEBUG=true"
-    [ "$cleanup" = "true" ] && env_args="$env_args -e CLEANUP_CONTAINERS=true"
+    # Build extra arguments as an array to preserve quoting
+    local extra_args=()
+    [ -n "$prepull_images" ] && extra_args+=(-e "PREPULL_IMAGES=$prepull_images")
+    [ -n "$workdir" ] && extra_args+=(-e "WORKDIR=$workdir")
+    [ "$debug" = "true" ] && extra_args+=(-e "DEBUG=true")
+    [ "$cleanup" = "true" ] && extra_args+=(-e "CLEANUP_CONTAINERS=true")
 
-    # Check for Maven settings.xml and mount if exists (unless disabled)
-    local maven_settings_volume=""
-    if [ "${MAVEN_SETTINGS_FILE:-auto}" != "none" ]; then
-        local settings_file="${MAVEN_SETTINGS_FILE:-$HOME/.m2/settings.xml}"
-        if [ -f "$settings_file" ]; then
-            maven_settings_volume="-v $settings_file:/root/.m2/settings.xml:ro"
-            [ "$debug" = "true" ] && echo "Mounting Maven settings.xml from: $settings_file"
-        fi
+    # Mount Maven settings.xml if applicable
+    get_maven_settings_args
+    if [ ${#MAVEN_SETTINGS_ARGS[@]} -gt 0 ]; then
+        extra_args+=("${MAVEN_SETTINGS_ARGS[@]}")
+        [ "$debug" = "true" ] && echo "Mounting Maven settings.xml from: ${MAVEN_SETTINGS_FILE:-$HOME/.m2/settings.xml}"
     fi
 
-    # Get current directory as project directory
-    export PROJECT_DIR="$(pwd)"
-    export PROJECT_NAME="$(basename "$PROJECT_DIR")"
+    set_project_vars
 
     echo "Running tests in DinD environment..."
     echo "Project directory: $PROJECT_DIR"
@@ -163,29 +175,23 @@ cmd_run() {
     echo "Command: ${test_command[*]}"
     echo ""
 
-    cd "$SCRIPT_DIR"
-    $COMPOSE_CMD run --rm \
+    $COMPOSE_CMD -f "$COMPOSE_FILE" run --rm \
         --name "dind-test-runner-$PROJECT_NAME" \
         -v "$PROJECT_DIR:/workspace:cached" \
-        $maven_settings_volume \
-        $env_args \
+        "${extra_args[@]}" \
         dind-test-runner \
         "${test_command[@]}"
 }
 
 # Function to open interactive shell
 cmd_shell() {
-    # Check for Maven settings.xml and mount if exists (unless disabled)
-    local maven_settings_volume=""
-    if [ "${MAVEN_SETTINGS_FILE:-auto}" != "none" ]; then
-        local settings_file="${MAVEN_SETTINGS_FILE:-$HOME/.m2/settings.xml}"
-        if [ -f "$settings_file" ]; then
-            maven_settings_volume="-v $settings_file:/root/.m2/settings.xml:ro"
-        fi
-    fi
+    get_maven_settings_args
+    set_project_vars
 
-    export PROJECT_DIR="$(pwd)"
-    export PROJECT_NAME="$(basename "$PROJECT_DIR")"
+    local extra_args=()
+    if [ ${#MAVEN_SETTINGS_ARGS[@]} -gt 0 ]; then
+        extra_args+=("${MAVEN_SETTINGS_ARGS[@]}")
+    fi
 
     echo "Opening interactive shell in DinD environment..."
     echo "Project directory: $PROJECT_DIR"
@@ -197,11 +203,10 @@ cmd_shell() {
     echo "  - Run your tests manually (e.g., 'mvn test', 'npm test')"
     echo ""
 
-    cd "$SCRIPT_DIR"
-    $COMPOSE_CMD run --rm \
+    $COMPOSE_CMD -f "$COMPOSE_FILE" run --rm \
         --name "dind-test-runner-$PROJECT_NAME" \
         -v "$PROJECT_DIR:/workspace:cached" \
-        $maven_settings_volume \
+        "${extra_args[@]}" \
         dind-test-runner \
         bash
 }
@@ -239,11 +244,9 @@ cmd_clean() {
     echo "This will remove unused images but preserve the volume"
     echo ""
 
-    export PROJECT_DIR="$(pwd)"
-    export PROJECT_NAME="$(basename "$PROJECT_DIR")"
+    set_project_vars
 
-    cd "$SCRIPT_DIR"
-    $COMPOSE_CMD run --rm \
+    $COMPOSE_CMD -f "$COMPOSE_FILE" run --rm \
         --name "dind-test-runner-$PROJECT_NAME" \
         dind-test-runner \
         bash -c "/usr/local/bin/start-dockerd.sh && docker system prune -af"
@@ -264,8 +267,7 @@ cmd_clean_all() {
     read -p "Are you sure? (yes/no): " confirm
 
     if [ "$confirm" = "yes" ]; then
-        cd "$SCRIPT_DIR"
-        $COMPOSE_CMD down -v
+        $COMPOSE_CMD -f "$COMPOSE_FILE" down -v
         echo ""
         echo "✓ All volumes removed"
         echo "  Run 'dind-test init' to rebuild the image"

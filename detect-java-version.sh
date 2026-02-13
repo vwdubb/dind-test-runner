@@ -14,9 +14,17 @@ detect_from_maven() {
         return 1
     fi
 
-    # Look for <java.version>, <maven.compiler.source>, or <maven.compiler.target>
+    # Look for <java.version>, <maven.compiler.release>, <maven.compiler.source>, or <maven.compiler.target>
     # Using sed instead of grep -P for BusyBox compatibility
     local java_version=$(sed -n 's/.*<java\.version>\([^<]*\)<\/java\.version>.*/\1/p' "$pom_file" 2>/dev/null | head -1)
+
+    if [ -z "$java_version" ]; then
+        java_version=$(sed -n 's/.*<maven\.compiler\.release>\([^<]*\)<\/maven\.compiler\.release>.*/\1/p' "$pom_file" 2>/dev/null | head -1)
+    fi
+
+    if [ -z "$java_version" ]; then
+        java_version=$(sed -n 's/.*<release>\([^<]*\)<\/release>.*/\1/p' "$pom_file" 2>/dev/null | head -1)
+    fi
 
     if [ -z "$java_version" ]; then
         java_version=$(sed -n 's/.*<maven\.compiler\.source>\([^<]*\)<\/maven\.compiler\.source>.*/\1/p' "$pom_file" 2>/dev/null | head -1)
@@ -38,6 +46,14 @@ detect_from_maven() {
             if [ -n "$module" ] && [ -f "$WORKDIR/$module/pom.xml" ]; then
                 local module_version=""
                 module_version=$(sed -n 's/.*<java\.version>\([^<]*\)<\/java\.version>.*/\1/p' "$WORKDIR/$module/pom.xml" 2>/dev/null | head -1)
+
+                if [ -z "$module_version" ]; then
+                    module_version=$(sed -n 's/.*<maven\.compiler\.release>\([^<]*\)<\/maven\.compiler\.release>.*/\1/p' "$WORKDIR/$module/pom.xml" 2>/dev/null | head -1)
+                fi
+
+                if [ -z "$module_version" ]; then
+                    module_version=$(sed -n 's/.*<release>\([^<]*\)<\/release>.*/\1/p' "$WORKDIR/$module/pom.xml" 2>/dev/null | head -1)
+                fi
 
                 if [ -z "$module_version" ]; then
                     module_version=$(sed -n 's/.*<maven\.compiler\.source>\([^<]*\)<\/maven\.compiler\.source>.*/\1/p' "$WORKDIR/$module/pom.xml" 2>/dev/null | head -1)
@@ -82,29 +98,32 @@ detect_from_maven() {
     return 1
 }
 
-# Function to detect Java version from Gradle build files
-detect_from_gradle() {
-    local gradle_file=""
+# Helper: extract Java version from a single Gradle build file
+# Returns the version on stdout, or empty if not found
+detect_gradle_version_from_file() {
+    local gradle_file="$1"
 
-    # Check for build.gradle.kts (Kotlin) or build.gradle (Groovy)
-    if [ -f "$WORKDIR/build.gradle.kts" ]; then
-        gradle_file="$WORKDIR/build.gradle.kts"
-    elif [ -f "$WORKDIR/build.gradle" ]; then
-        gradle_file="$WORKDIR/build.gradle"
-    else
-        return 1
+    [ -f "$gradle_file" ] || return 1
+
+    # Look for jvmToolchain(17) or jvmToolchain.set(17)
+    local java_version=$(sed -n 's/.*jvmToolchain\s*(\s*\([0-9][0-9]*\)\s*).*/\1/p' "$gradle_file" 2>/dev/null | head -1)
+
+    # Look for languageVersion.set(JavaLanguageVersion.of(17))
+    if [ -z "$java_version" ]; then
+        java_version=$(sed -n 's/.*JavaLanguageVersion\.of\s*(\s*\([0-9][0-9]*\)\s*).*/\1/p' "$gradle_file" 2>/dev/null | head -1)
     fi
 
-    # Look for sourceCompatibility or targetCompatibility
-    # Using sed/awk for BusyBox compatibility
-    local java_version=$(sed -n 's/.*sourceCompatibility.*VERSION_\([0-9][0-9]*\).*/\1/p' "$gradle_file" 2>/dev/null | head -1)
+    # Look for sourceCompatibility with JavaVersion.VERSION_XX enum
+    if [ -z "$java_version" ]; then
+        java_version=$(sed -n 's/.*sourceCompatibility.*VERSION_\([0-9][0-9]*\).*/\1/p' "$gradle_file" 2>/dev/null | head -1)
+    fi
 
     if [ -z "$java_version" ]; then
         java_version=$(sed -n 's/.*targetCompatibility.*VERSION_\([0-9][0-9]*\).*/\1/p' "$gradle_file" 2>/dev/null | head -1)
     fi
 
+    # Try string format: sourceCompatibility = "11"
     if [ -z "$java_version" ]; then
-        # Try string format: sourceCompatibility = "11"
         java_version=$(sed -n 's/.*sourceCompatibility.*["\x27]\([0-9][0-9]*\)["\x27].*/\1/p' "$gradle_file" 2>/dev/null | head -1)
     fi
 
@@ -115,6 +134,70 @@ detect_from_gradle() {
     if [ -n "$java_version" ]; then
         echo "$java_version"
         return 0
+    fi
+
+    return 1
+}
+
+# Function to detect Java version from Gradle build files (supports multi-module)
+detect_from_gradle() {
+    local root_gradle=""
+
+    # Check for build.gradle.kts (Kotlin) or build.gradle (Groovy)
+    if [ -f "$WORKDIR/build.gradle.kts" ]; then
+        root_gradle="$WORKDIR/build.gradle.kts"
+    elif [ -f "$WORKDIR/build.gradle" ]; then
+        root_gradle="$WORKDIR/build.gradle"
+    else
+        return 1
+    fi
+
+    # Try the root build file first
+    local java_version
+    if java_version=$(detect_gradle_version_from_file "$root_gradle"); then
+        echo "$java_version"
+        return 0
+    fi
+
+    # For multi-module projects, check settings.gradle(.kts) for subproject directories
+    local settings_file=""
+    if [ -f "$WORKDIR/settings.gradle.kts" ]; then
+        settings_file="$WORKDIR/settings.gradle.kts"
+    elif [ -f "$WORKDIR/settings.gradle" ]; then
+        settings_file="$WORKDIR/settings.gradle"
+    fi
+
+    if [ -n "$settings_file" ]; then
+        # Extract included subproject names: include("module1", "module2") or include ':module1', ':module2'
+        local modules=$(sed -n "s/.*include\s*[\"'(:]//p" "$settings_file" 2>/dev/null \
+            | sed "s/[\"'):]//g" | tr ',' '\n' | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')
+        local max_version=0
+
+        while IFS= read -r module; do
+            [ -z "$module" ] && continue
+            # Convert Gradle ':' module paths to directory paths
+            local module_dir=$(echo "$module" | tr ':' '/')
+            local module_gradle=""
+            if [ -f "$WORKDIR/$module_dir/build.gradle.kts" ]; then
+                module_gradle="$WORKDIR/$module_dir/build.gradle.kts"
+            elif [ -f "$WORKDIR/$module_dir/build.gradle" ]; then
+                module_gradle="$WORKDIR/$module_dir/build.gradle"
+            fi
+
+            if [ -n "$module_gradle" ]; then
+                local module_version
+                if module_version=$(detect_gradle_version_from_file "$module_gradle"); then
+                    if [ "$module_version" -gt "$max_version" ] 2>/dev/null; then
+                        max_version="$module_version"
+                    fi
+                fi
+            fi
+        done <<< "$modules"
+
+        if [ "$max_version" -gt 0 ] 2>/dev/null; then
+            echo "$max_version"
+            return 0
+        fi
     fi
 
     return 1

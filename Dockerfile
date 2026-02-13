@@ -3,8 +3,7 @@ FROM docker:27.0-dind
 # Build arguments for runtime versions
 ARG JAVA_VERSION=21
 ARG MAVEN_VERSION=3.9.6
-ARG NODE_VERSION=20
-ARG PYTHON_VERSION=3.11
+ARG GRADLE_VERSION=8.5
 
 # Install base dependencies and build tools
 RUN apk add --no-cache \
@@ -61,10 +60,10 @@ ENV PATH="${MAVEN_HOME}/bin:${PATH}"
 
 # Install Gradle
 RUN cd /tmp && \
-    wget https://services.gradle.org/distributions/gradle-8.5-bin.zip && \
-    unzip gradle-8.5-bin.zip && \
-    mv gradle-8.5 /opt/gradle && \
-    rm gradle-8.5-bin.zip
+    wget https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip && \
+    unzip gradle-${GRADLE_VERSION}-bin.zip && \
+    mv gradle-${GRADLE_VERSION} /opt/gradle && \
+    rm gradle-${GRADLE_VERSION}-bin.zip
 
 ENV GRADLE_HOME=/opt/gradle
 ENV PATH="${GRADLE_HOME}/bin:${PATH}"
