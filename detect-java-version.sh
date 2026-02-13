@@ -31,12 +31,20 @@ detect_from_maven() {
         java_version=$(sed -n 's/.*<maven\.compiler\.release>\([^<]*\)<\/maven\.compiler\.release>.*/\1/p' "$pom_file" 2>/dev/null | head -1)
     fi
 
-    # If root pom doesn't have version and it's a multi-module project, check all modules
-    # For multi-module projects with different versions, use the HIGHEST version
-    if [ -z "$java_version" ]; then
-        # Get all modules
-        local modules=$(sed -n 's/.*<module>\([^<]*\)<\/module>.*/\1/p' "$pom_file" 2>/dev/null)
+    # For multi-module projects, always check all modules and use the HIGHEST version
+    # found across root and all modules (modules may override the parent version)
+    local modules=$(sed -n 's/.*<module>\([^<]*\)<\/module>.*/\1/p' "$pom_file" 2>/dev/null)
+
+    if [ -n "$modules" ]; then
+        # Normalize root version for comparison
         local max_version=0
+        if [ -n "$java_version" ]; then
+            if [[ "$java_version" =~ ^1\.([0-9]+) ]]; then
+                max_version="${BASH_REMATCH[1]}"
+            else
+                max_version=$(echo "$java_version" | cut -d'.' -f1)
+            fi
+        fi
 
         # Iterate through each module and find the highest Java version
         while IFS= read -r module; do
@@ -72,7 +80,7 @@ detect_from_maven() {
             fi
         done <<< "$modules"
 
-        # If we found a version, use it
+        # Use the highest version found across root + all modules
         if [ "$max_version" -gt 0 ] 2>/dev/null; then
             java_version="$max_version"
         fi
