@@ -10,9 +10,9 @@ if docker info > /dev/null 2>&1; then
     exit 0
 fi
 
-# Docker Desktop on ARM already has QEMU support built-in
+# Docker on ARM already has QEMU support built-in
 # We just need to make sure containers specify --platform linux/amd64 when needed
-echo "Note: Using Docker Desktop's built-in QEMU support for x86_64 containers"
+echo "Note: Using Docker's built-in QEMU support for x86_64 containers"
 
 # Start Docker daemon in background
 # Note: storage-driver and data-root are configured in /etc/docker/daemon.json
@@ -55,9 +55,9 @@ echo ""
 echo "=== Docker Info ==="
 docker info | grep -E "Operating System|Architecture|Server Version|Storage Driver|Default Platform" || docker info
 
-# x86_64 emulation is handled by Docker Desktop
+# x86_64 emulation is handled by Docker
 echo ""
-echo "✓ Docker daemon ready (x86_64 support via Docker Desktop)"
+echo "✓ Docker daemon ready (x86_64 support via Docker's built-in QEMU)"
 
 # Display disk usage
 echo ""

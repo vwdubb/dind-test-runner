@@ -22,7 +22,7 @@ RUN apk add --no-cache \
     zip \
     && rm -rf /var/cache/apk/*
 
-# Note: Docker Desktop on ARM already has QEMU support built-in
+# Note: Docker on ARM already has QEMU support built-in
 # No need to install QEMU separately - it will use the host's emulation
 
 # Install multiple Java versions (8, 11, 17, 21)

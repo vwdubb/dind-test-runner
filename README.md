@@ -619,7 +619,7 @@ Example: If you run from `/Users/me/my-project`, the container name is `dind-tes
 **Solutions:**
 1. Pre-pull with platform flag: `docker pull --platform linux/amd64 mysql:8.0`
 2. Use `--platform linux/amd64` in your Dockerfiles
-3. QEMU emulation is built into Docker Desktop for Mac
+3. QEMU emulation is built into Docker for Mac
 
 ## Advanced Usage
 
