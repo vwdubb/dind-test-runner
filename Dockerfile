@@ -21,6 +21,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     lsb-release \
     tar \
     gzip \
+    tzdata \
     unzip \
     zip \
     iptables \
