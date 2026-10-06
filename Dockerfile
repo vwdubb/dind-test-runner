@@ -20,6 +20,9 @@ RUN apk add --no-cache \
     gzip \
     unzip \
     zip \
+    gcompat \
+    libstdc++ \
+    libgcc \
     && rm -rf /var/cache/apk/*
 
 # Note: Docker Desktop on ARM already has QEMU support built-in
@@ -69,6 +72,7 @@ RUN cd /tmp && \
 
 ENV GRADLE_HOME=/opt/gradle
 ENV PATH="${GRADLE_HOME}/bin:${PATH}"
+ENV JAVA_TOOL_OPTIONS="-Dapi.version=1.44"
 
 # Install Node.js and npm
 RUN apk add --no-cache nodejs npm && rm -rf /var/cache/apk/*
