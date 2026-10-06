@@ -42,6 +42,17 @@ RUN apk add --no-cache \
     openjdk25-jdk \
     && rm -rf /var/cache/apk/*
 
+# Python: 3.12 is the default `python3`/`python`; 3.10 is kept for node-gyp <= 9
+# (node-sass and other native npm modules), which needs distutils and the 'rU' file mode.
+# Both are uv-managed standalone builds, so this works on arm64 and amd64 alike.
+RUN apk add --no-cache uv \
+    && uv python install 3.10 3.12 \
+    && ln -sf "$(uv python find 3.12)" /usr/local/bin/python3.12 \
+    && ln -sf "$(uv python find 3.10)" /usr/local/bin/python3.10 \
+    && ln -sf /usr/local/bin/python3.12 /usr/local/bin/python3 \
+    && ln -sf /usr/local/bin/python3.12 /usr/local/bin/python
+ENV PYTHON=/usr/local/bin/python3.10
+
 # Set default JAVA_HOME to Java 25 (can be changed dynamically)
 ENV JAVA_HOME=/usr/lib/jvm/java-25-openjdk
 ENV PATH="${JAVA_HOME}/bin:${PATH}"
@@ -79,9 +90,6 @@ RUN apk add --no-cache nodejs npm && rm -rf /var/cache/apk/*
 
 # Install Yarn
 RUN npm install -g yarn
-
-# Install Python and pip
-RUN apk add --no-cache python3 py3-pip && rm -rf /var/cache/apk/*
 
 # Create symlink for python command
 RUN ln -sf /usr/bin/python3 /usr/bin/python
@@ -138,8 +146,7 @@ RUN echo "=== Verifying Java 8 ===" && /usr/lib/jvm/java-8-openjdk/bin/java -ver
     echo "=== Gradle ===" && gradle --version && \
     echo "=== Node ===" && node --version && \
     echo "=== npm ===" && npm --version && \
-    echo "=== Python ===" && python --version && \
-    echo "=== pip ===" && pip --version
+    echo "=== Python ===" && python --version
 
 # Set entrypoint
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
