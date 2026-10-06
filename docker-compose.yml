@@ -6,8 +6,8 @@ services:
       dockerfile: Dockerfile
       args:
         JAVA_VERSION: ${JAVA_VERSION:-21}
-        MAVEN_VERSION: ${MAVEN_VERSION:-3.9.6}
-        GRADLE_VERSION: ${GRADLE_VERSION:-8.5}
+        MAVEN_VERSION: ${MAVEN_VERSION:-3.9.9}
+        GRADLE_VERSION: ${GRADLE_VERSION:-9.8.0}
     image: dind-test-runner:latest
     privileged: true  # Required for Docker-in-Docker
 

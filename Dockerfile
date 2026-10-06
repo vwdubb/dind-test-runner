@@ -1,9 +1,9 @@
-FROM docker:27.0-dind
+FROM docker:29-dind
 
 # Build arguments for runtime versions
-ARG JAVA_VERSION=21
-ARG MAVEN_VERSION=3.9.6
-ARG GRADLE_VERSION=8.5
+ARG JAVA_VERSION=25
+ARG MAVEN_VERSION=3.9.9
+ARG GRADLE_VERSION=9.8.0
 
 # Install base dependencies and build tools
 RUN apk add --no-cache \
@@ -25,8 +25,7 @@ RUN apk add --no-cache \
 # Note: Docker Desktop on ARM already has QEMU support built-in
 # No need to install QEMU separately - it will use the host's emulation
 
-# Install multiple Java versions (8, 11, 17, 21)
-# Note: Java 25 will be added when available in Alpine repos
+# Install multiple Java versions (8, 11, 17, 21, 25)
 RUN apk add --no-cache \
     openjdk8 \
     openjdk8-jdk \
@@ -36,10 +35,12 @@ RUN apk add --no-cache \
     openjdk17-jdk \
     openjdk21 \
     openjdk21-jdk \
+    openjdk25 \
+    openjdk25-jdk \
     && rm -rf /var/cache/apk/*
 
-# Set default JAVA_HOME to Java 21 (can be changed dynamically)
-ENV JAVA_HOME=/usr/lib/jvm/java-21-openjdk
+# Set default JAVA_HOME to Java 25 (can be changed dynamically)
+ENV JAVA_HOME=/usr/lib/jvm/java-25-openjdk
 ENV PATH="${JAVA_HOME}/bin:${PATH}"
 
 # Store paths to all Java installations for easy switching
@@ -47,6 +48,7 @@ ENV JAVA_8_HOME=/usr/lib/jvm/java-8-openjdk
 ENV JAVA_11_HOME=/usr/lib/jvm/java-11-openjdk
 ENV JAVA_17_HOME=/usr/lib/jvm/java-17-openjdk
 ENV JAVA_21_HOME=/usr/lib/jvm/java-21-openjdk
+ENV JAVA_25_HOME=/usr/lib/jvm/java-25-openjdk
 
 # Install Maven
 RUN cd /tmp && \
@@ -126,6 +128,7 @@ RUN echo "=== Verifying Java 8 ===" && /usr/lib/jvm/java-8-openjdk/bin/java -ver
     echo "=== Verifying Java 11 ===" && /usr/lib/jvm/java-11-openjdk/bin/java -version && \
     echo "=== Verifying Java 17 ===" && /usr/lib/jvm/java-17-openjdk/bin/java -version && \
     echo "=== Verifying Java 21 ===" && /usr/lib/jvm/java-21-openjdk/bin/java -version && \
+    echo "=== Verifying Java 25 ===" && /usr/lib/jvm/java-25-openjdk/bin/java -version && \
     echo "=== Default Java ===" && java -version && \
     echo "=== Maven ===" && mvn --version && \
     echo "=== Gradle ===" && gradle --version && \

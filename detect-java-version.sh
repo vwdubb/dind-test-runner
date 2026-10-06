@@ -1,6 +1,6 @@
 #!/bin/bash
 # Detect required Java version from project configuration
-# Returns: 8, 11, 17, or 21 (defaults to 21 if not detected)
+# Returns: 8, 11, 17, 21, 25 (defaults to 25 if not detected)
 
 set -e
 
@@ -258,6 +258,6 @@ if detected_version=$(detect_from_gradle); then
     exit 0
 fi
 
-# Default to Java 21 if nothing detected
-echo "21"
+# Default to Java 25 if nothing detected
+echo "25"
 exit 0
