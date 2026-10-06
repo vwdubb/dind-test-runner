@@ -9,7 +9,7 @@ REQUESTED_VERSION=$1
 
 if [ -z "$REQUESTED_VERSION" ]; then
     echo "Error: Java version not specified"
-    echo "Usage: switch-java-version.sh <8|11|17|21>"
+    echo "Usage: switch-java-version.sh <8|11|17|21|25>"
     exit 1
 fi
 
@@ -20,7 +20,7 @@ else
     REQUESTED_VERSION=$(echo "$REQUESTED_VERSION" | sed 's/[^0-9]//g' | cut -c1-2)
 fi
 
-# Map to available versions (8, 11, 17, 21 are installed)
+# Map to available versions (8, 11, 17, 21, 25 are installed)
 case "$REQUESTED_VERSION" in
     8)
         JAVA_VERSION=8
@@ -34,9 +34,12 @@ case "$REQUESTED_VERSION" in
     18|19|20|21)
         JAVA_VERSION=21
         ;;
+    22|23|24|25)
+        JAVA_VERSION=25
+        ;;
     *)
-        echo "Warning: Unsupported Java version $REQUESTED_VERSION, defaulting to Java 21"
-        JAVA_VERSION=21
+        echo "Warning: Unsupported Java version $REQUESTED_VERSION, defaulting to Java 25"
+        JAVA_VERSION=25
         ;;
 esac
 
@@ -53,6 +56,9 @@ case "$JAVA_VERSION" in
         ;;
     21)
         export JAVA_HOME=/usr/lib/jvm/java-21-openjdk
+        ;;
+    25)
+        export JAVA_HOME=/usr/lib/jvm/java-25-openjdk
         ;;
 esac
 
